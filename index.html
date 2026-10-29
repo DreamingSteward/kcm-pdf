@@ -4991,7 +4991,7 @@ async function qSnapRender(r, o){
     const el=document.createElement("div"); el.className="pmpg snap"; el.innerHTML=pmQ(r, r.q.n, opt, false)+pmWm(); stg.appendChild(el);
     await Promise.all([...el.querySelectorAll("img")].map(i=>i.decode?i.decode().catch(()=>{}):0));
     pmFixLines(el);
-    const c=await html2canvas(el,{scale:3,backgroundColor:"#ffffff",logging:false});
+    const c=await pmShot(el,3);
     return c;
   } finally { stg.remove(); }
 }
@@ -5149,6 +5149,12 @@ function pmDocHead(title, m, opt, right){
 const PM_MM=96/25.4;
 function pmWm(){ const u=(typeof UPDATED!=="undefined"&&UPDATED)?String(UPDATED):""; return `<div class="pm-wm">© ${u.slice(0,4)||"2026"} @KCM</div>`; }
 
+/* PDF 쪽 그리기 — html2canvas 는 부를 때마다 문서 전체를 복제함 → 그릴 쪽 · 그 조상 · 스타일만 복제 (앱 데이터 스크립트 · 다른 화면은 건너뜀) */
+function pmIgn(el){ return n=>{ if(n.nodeType!==1) return false; const t=n.tagName;
+  if(t==="SCRIPT") return true; if(t==="STYLE"||t==="LINK"||t==="META"||t==="TITLE"||t==="HEAD") return false;
+  if(n===el||n.contains(el)||el.contains(n)) return false; return !(n.closest&&n.closest("head")); }; }
+function pmShot(el,scale){ return html2canvas(el,{scale,backgroundColor:"#ffffff",logging:false,ignoreElements:pmIgn(el)}); }
+const pmYield=()=>new Promise(r=>setTimeout(r,16));   // 쪽마다 화면에 틈 — 진행 막대 · 중단 버튼이 움직이게
 async function pmBuild(list, opt, stage, onProg, stopped){
   const chk=()=>{ if(stopped&&stopped()) throw new Error("__stop__"); };   // 중단 버튼
   const pages=[];
@@ -5158,7 +5164,7 @@ async function pmBuild(list, opt, stage, onProg, stopped){
     const h=el.getBoundingClientRect().height, minH=297*PM_MM;
     el.style.height=(fixedA4||h<=minH+0.3*PM_MM ? minH : h+PM_MM)+"px";   // export_pdf.py 와 같은 규칙: 짧으면 A4, 길면 내용 + 1mm
     el.insertAdjacentHTML("beforeend", pmWm());
-    const c=await html2canvas(el,{scale:2.5,backgroundColor:"#ffffff",logging:false}); pages.push({c,title,k:kind||"body"}); el.remove(); onProg(pages.length); };
+    const c=await pmShot(el,2.5); pages.push({u:c.toDataURL("image/jpeg",0.85),w:c.width,h:c.height,title,k:kind||"body"}); c.width=c.height=0; el.remove(); onProg(pages.length); await pmYield(); };
   const byT=new Map(); list.forEach(r=>{ if(!byT.has(r.t)) byT.set(r.t,[]); byT.get(r.t).push(r); });
   const ts=[...byT.keys()].sort(pmSortT);
   /* 앞장: 목차 (build.py 의 front 와 같은 모양) */
@@ -5327,10 +5333,10 @@ function pmDocInfo(doc){
 }
 function pmPdf(pages){
   const { jsPDF } = window.jspdf; let doc=null;
-  pages.forEach((pg,i)=>{ const c=pg.c, w=210/25.4*72, h=c.height/c.width*w;   // 폭 210mm 고정, 높이는 쪽마다
+  pages.forEach((pg,i)=>{ const w=210/25.4*72, h=pg.h/pg.w*w;   // 폭 210mm 고정, 높이는 쪽마다
     if(!doc) doc=new jsPDF({unit:"pt",format:[w,h],orientation:"p",compress:true});
     else doc.addPage([w,h],"p");
-    doc.addImage(c.toDataURL("image/jpeg",0.85),"JPEG",0,0,w,h,undefined,"FAST");
+    doc.addImage(pg.u,"JPEG",0,0,w,h,undefined,"FAST");
     pmHiddenMark(doc,w,h,i+1,pages.length);
   });
   pmDocInfo(doc);
@@ -5542,7 +5548,7 @@ function openPdfMaker(){
       fname=`${document.title.replace(/[\\/:*?"<>|]/g,"").replace(/\s+/g,"")}_${PM_RECS.find(r=>r[0]===S.rec)[1].replace(/\s/g,"")}_${list.length}문항.pdf`;
       $p("#pmMsg").textContent=`완료 — ${pages.length}쪽 · ${(blob.size/1048576).toFixed(1)} MB · ${((performance.now()-t0)/1000).toFixed(1)}초`;
       $p("#pmFootInfo").textContent=`(${pages.length}쪽 중 앞 ${Math.min(4,pages.length)}쪽)`;
-      $p("#pmThumbs").innerHTML=pages.slice(0,4).map((pg,i)=>`<figure><img src="${pg.c.toDataURL("image/jpeg",0.7)}" alt=""><figcaption>${i+1}쪽${pg.title?" · "+esc(pg.title):""}</figcaption></figure>`).join("");
+      $p("#pmThumbs").innerHTML=pages.slice(0,4).map((pg,i)=>`<figure><img src="${pg.u}" alt=""><figcaption>${i+1}쪽${pg.title?" · "+esc(pg.title):""}</figcaption></figure>`).join("");
       $p("#pmFoot").hidden=false; $p("#pmFoot").scrollIntoView({behavior:"smooth",block:"nearest"});
     }catch(e){ if(e&&e.message==="__stop__"){ $p("#pmMsg").textContent="중단했어요"; $p("#pmProg").hidden=true; blob=null; made=null; }
       else $p("#pmMsg").textContent="만들기 실패: "+(e&&e.message||e); }
@@ -5559,12 +5565,13 @@ function openPdfMaker(){
       <div class="pmcode" hidden><textarea readonly></textarea><p class="h">자동 복사가 막혔어요 — <b>전체 선택</b> 후 복사하거나, <b>코드 파일로 받기</b>로 저장해 기출풀이 PDF 만들기 (공용)의 <b>파일에서 불러오기</b>로 여세요. 일부만 선택하면 코드가 깨져요.</p><div class="pmalt-b"><button type="button" class="btn ghost sm" data-alt="selall">전체 선택</button><button type="button" class="btn ghost sm" data-alt="codefile">코드 파일로 받기 (.txt)</button></div></div>
       <p class="h">${canShare?"공유: 휴대폰 공유 창에서 <b>파일에 저장</b>·굿노트 등으로 · ":""}그림: 여러 쪽을 길게 이어 붙인 그림 몇 장으로 — PC는 오른쪽 클릭 → 이미지 저장, 휴대폰은 길게 눌러 저장</p>`;
     box.hidden=false; };
-  const pmLong=(pg,W)=>{   // 쪽들을 폭 W 로 줄여 세로로 이어 붙임 — 한 장이 너무 크지 않게(아이폰 캔버스 한도) 나눔
+  const pmLong=async(pg,W)=>{   // 쪽들을 폭 W 로 줄여 세로로 이어 붙임 — 한 장이 너무 크지 않게(아이폰 캔버스 한도) 나눔
     const MAXA=12e6, out=[]; let cur=[], h=0;
-    const hs=pg.map(x=>Math.round(x.c.height*W/x.c.width)), gap=16;
+    const hs=pg.map(x=>Math.round(x.h*W/x.w)), gap=16;
+    const ims=await Promise.all(pg.map(x=>new Promise(r=>{ const i=new Image(); i.onload=i.onerror=()=>r(i); i.src=x.u; })));
     pg.forEach((x,i)=>{ if(cur.length && (h+gap+hs[i])*W>MAXA){ out.push(cur); cur=[]; h=0; } cur.push(i); h+=(cur.length>1?gap:0)+hs[i]; }); if(cur.length) out.push(cur);
     return out.map(g=>{ const H=g.reduce((a,i,k)=>a+hs[i]+(k?gap:0),0), c=document.createElement("canvas"); c.width=W; c.height=H; const x=c.getContext("2d");
-      x.fillStyle="#9aa3a8"; x.fillRect(0,0,W,H); let y=0; g.forEach((i,k)=>{ if(k) y+=gap; x.drawImage(pg[i].c,0,y,W,hs[i]); y+=hs[i]; });
+      x.fillStyle="#9aa3a8"; x.fillRect(0,0,W,H); let y=0; g.forEach((i,k)=>{ if(k) y+=gap; x.drawImage(ims[i],0,y,W,hs[i]); y+=hs[i]; });
       return {u:c.toDataURL("image/jpeg",0.88), cap:g.length>1?`${g[0]+1}–${g[g.length-1]+1}쪽`:`${g[0]+1}쪽`}; }); };
   $p("#pmAlt").addEventListener("click",async e=>{ const b=e.target.closest("[data-alt]"); if(!b) return; const box=$p("#pmAlt"), pg=box._pg||[];
     if(b.dataset.alt==="code"){ const m=made; if(!m) return;
@@ -5597,7 +5604,7 @@ function openPdfMaker(){
     if(b.dataset.alt==="share"){ try{ await navigator.share({files:[box._f], title:box._f.name}); }catch(err){ if(!(err&&err.name==="AbortError")) notify("공유도 막혀 있어요 — 그림으로 받기를 써 주세요"); } return; }
     if(!pg.length) return;
     const v=document.createElement("div"); v.className="overlay pmimgv"; document.body.appendChild(v);
-    const draw=mode=>{ const L=mode==="long"?pmLong(pg,1240):pg.map((x,i)=>({u:x.c.toDataURL("image/jpeg",0.9),cap:`${i+1}쪽${x.title?" · "+esc(x.title):""}`}));
+    const draw=async mode=>{ const L=mode==="long"?await pmLong(pg,1240):pg.map((x,i)=>({u:x.u,cap:`${i+1}쪽${x.title?" · "+esc(x.title):""}`}));
       v.innerHTML=`<div class="dialog"><div class="pmimgh"><b>그림 ${L.length}장</b><span class="seg"><button type="button" data-m="long" class="${mode==="long"?"on":""}">길게 이어 붙이기</button><button type="button" data-m="page" class="${mode==="page"?"on":""}">쪽마다</button></span><button type="button" class="btn ghost" data-x>닫기</button>
         <span class="h">PC: 오른쪽 클릭 → 이미지 저장 · 휴대폰: 길게 눌러 사진에 저장</span></div>
         <div class="pmimgs">${L.map(x=>`<figure><img src="${x.u}" alt=""><figcaption>${x.cap}</figcaption></figure>`).join("")}</div></div>`; };
