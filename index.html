@@ -3912,7 +3912,7 @@ function syncSummary(){
   return `채점 ${ans} · 오답 ${wrong} · 별표 ${stars.size} · 메모 ${memo+omemo}${ni?` · 메모 사진 ${ni}장`:""}`;
 }
 async function applyImport(code){
-  if(String(code||"").indexOf(PMP_PRE)>=0) return {ok:false, msg:"인쇄용 코드예요 — 기출풀이 PDF 만들기 (공용)에 붙여넣어 주세요."};
+  if(/kcmprint2:/i.test(String(code||""))) return {ok:false, msg:"인쇄용 코드예요 — 기출풀이 PDF 만들기 (공용)에 붙여넣어 주세요."};
   let raw = (code||"").replace(/\s+/g,"");     // 공백·줄바꿈 제거
   const tryJSON = (s)=>{ try{ return JSON.parse(s); }catch(e){ return null; } };
   const z=/ybq2:/i.exec(raw);
@@ -4645,8 +4645,8 @@ const pmB64d=t=>{ const s=atob(t), u=new Uint8Array(s.length); for(let i=0;i<s.l
 async function pmPrintCode(obj){ const raw=new TextEncoder().encode(JSON.stringify(obj));
   try{ if(typeof CompressionStream!=="undefined"){ const z=new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer()); return PMP_PRE+"z"+pmB64e(z); } }catch(e){}
   return PMP_PRE+"j"+pmB64e(raw); }
-async function pmPrintRead(code){ code=String(code||"").replace(/\s+/g,""); const i=code.indexOf(PMP_PRE); if(i<0) return null;
-  const body=code.slice(i+PMP_PRE.length), u=pmB64d(body.slice(1));
+async function pmPrintRead(code){ code=String(code||"").replace(/\s+/g,""); const m=/kcmprint2:/i.exec(code); if(!m) return null;   // 아이패드 붙여넣기에서 앞 글자가 소문자로 바뀌는 경우(kcmprint2:)도 읽음
+  const body=code.slice(m.index+PMP_PRE.length).replace(/[^A-Za-z0-9+/=]/g,""), u=pmB64d(body.slice(1));
   const raw=body[0]==="z"?new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer()):u;
   return JSON.parse(new TextDecoder().decode(raw)); }
 /* 공용 PDF 파일: 남이 준(조작된) 코드에서 스크립트가 실행되지 않게 — 코드의 글을 모두 정리한 뒤 씀
@@ -5556,7 +5556,7 @@ function openPdfMaker(){
     box.innerHTML=`<p>${manual?`<b style="color:var(--ink)">인쇄용 코드로 받기</b> — 다른 기기·계정에서 기출풀이 PDF 만들기 (공용)로 만들 때`:`<b>여기서는 바로 저장이 안 돼요</b>${why?` <span class="h">(${esc(why)})</span>`:""} — 아래 방법으로 받아 보세요.`}</p>
       <p class="h" style="margin-bottom:8px">${PM_WEB?`<b>기출풀이 PDF 만들기 (공용)</b> — ① <b>인쇄용 코드 복사</b>(지금 고른 설정 그대로) ② <b>기출풀이 PDF 만들기 (공용) 열기</b>(새 탭 · PC · 아이패드 · 폰 모두 돼요) ③ 코드 붙여넣기 → 바로 PDF 저장`:`<b>기출풀이 PDF 만들기 (공용)</b>로 받기 — ① <b>인쇄용 코드 복사</b>(지금 고른 설정 그대로) ② 파일(HTML)을 크롬·사파리로 열기 ③ 코드 붙여넣기 → 바로 PDF 저장${PM_HELPER?"":" · 파일은 앱을 공유한 사람에게 받아 주세요"}`}</p>
       <div class="pmalt-b"><button type="button" class="btn primary" data-alt="code">인쇄용 코드 복사</button>${PM_WEB?`<a class="btn ghost pmalt-hl" href="${esc(PM_WEB)}" target="_blank" rel="noopener"><span>기출풀이 PDF 만들기 (공용) 열기</span><small>새 탭 · 코드 붙여넣고 바로 PDF 저장</small></a>`:""}${PM_HELPER?`<a class="btn ghost pmalt-hl" href="${esc(PM_HELPER)}" target="_blank" rel="noopener"><span>${PM_WEB?"사용 설명":"사용 설명 · 기출풀이 PDF 만들기 (공용) 받기"}</span><small>새 탭에서 노션 페이지가 열려요</small></a>`:""}${canShare?`<button type="button" class="btn ghost" data-alt="share">공유하기 (PDF 그대로)</button>`:""}<button type="button" class="btn ghost" data-alt="img">그림으로 받기</button></div>
-      <div class="pmcode" hidden><textarea readonly></textarea><p class="h">자동 복사가 막혔어요 — 위 글을 모두 선택해 복사하세요.</p></div>
+      <div class="pmcode" hidden><textarea readonly></textarea><p class="h">자동 복사가 막혔어요 — <b>전체 선택</b> 후 복사하거나, <b>코드 파일로 받기</b>로 저장해 기출풀이 PDF 만들기 (공용)의 <b>파일에서 불러오기</b>로 여세요. 일부만 선택하면 코드가 깨져요.</p><div class="pmalt-b"><button type="button" class="btn ghost sm" data-alt="selall">전체 선택</button><button type="button" class="btn ghost sm" data-alt="codefile">코드 파일로 받기 (.txt)</button></div></div>
       <p class="h">${canShare?"공유: 휴대폰 공유 창에서 <b>파일에 저장</b>·굿노트 등으로 · ":""}그림: 여러 쪽을 길게 이어 붙인 그림 몇 장으로 — PC는 오른쪽 클릭 → 이미지 저장, 휴대폰은 길게 눌러 저장</p>`;
     box.hidden=false; };
   const pmLong=(pg,W)=>{   // 쪽들을 폭 W 로 줄여 세로로 이어 붙임 — 한 장이 너무 크지 않게(아이폰 캔버스 한도) 나눔
@@ -5568,6 +5568,7 @@ function openPdfMaker(){
       return {u:c.toDataURL("image/jpeg",0.88), cap:g.length>1?`${g[0]+1}–${g[g.length-1]+1}쪽`:`${g[0]+1}쪽`}; }); };
   $p("#pmAlt").addEventListener("click",async e=>{ const b=e.target.closest("[data-alt]"); if(!b) return; const box=$p("#pmAlt"), pg=box._pg||[];
     if(b.dataset.alt==="code"){ const m=made; if(!m) return;
+      const mkCode=async()=>{
       /* 고른 문항의 문제 데이터까지 담아서 — 공용 PDF 파일(시험 데이터 없음)에서 그대로 만들기 */
       const exM=new Map(); m.list.forEach(r=>{ if(!exM.has(r.e.id)) exM.set(r.e.id,{id:r.e.id, tab:r.e.tab, sub:r.e.sub||"", q:[]}); const q=Object.assign({},r.q); delete q.rel; exM.get(r.e.id).q.push(q); });
       const exs=realExams().filter(e=>exM.has(e.id)).map(e=>exM.get(e.id)), tl=new Set([...m.list.map(r=>r.t),...m.list.map(r=>r.q._t0||r.q.topicLabel)]);
@@ -5577,11 +5578,22 @@ function openPdfMaker(){
       const same={}; m.list.forEach(r=>{ if(r.same) same[r.k]=r.same; });
       const code=await pmPrintCode({v:2, key:KEY, app:document.title, exams:exs, labels:lab, meta, same, p:pay,
         s:{rec:S.rec, ex:[...S.ex], tps:[...S.tps], excl:[...S.excl], layout:S.layout, skip:!!S.skip, a4n:S.a4n, ans:S.ans, ck:S.ck}, noToc:$p("#pmNoToc").checked, split:$p("#pmSplit").checked&&!$p("#pmSplit").disabled});
+      return code; };
+      /* 아이패드 · 아이폰 사파리: 코드를 만드는 동안(비동기) 누른 동작이 끝나 복사가 막힘 → 누르자마자 ClipboardItem(약속)으로 복사 자리를 잡아 둠 */
+      const codeP=mkCode(); let ok=false;
+      if(typeof ClipboardItem!=="undefined"&&navigator.clipboard&&navigator.clipboard.write){
+        try{ await navigator.clipboard.write([new ClipboardItem({"text/plain":codeP.then(c=>{ if(c.length>40e6) throw new Error("big"); return new Blob([c],{type:"text/plain"}); })})]); ok=true; }catch(err){} }
+      const code=await codeP;
       if(code.length>40e6){ notify(`코드가 너무 커요 (${Math.round(code.length/1048576)} MB) — 문항이나 강의를 줄여 주세요`); return; }
-      let ok=false; try{ await navigator.clipboard.writeText(code); ok=true; }catch(err){}
+      if(!ok){ try{ await navigator.clipboard.writeText(code); ok=true; }catch(err){} }
+      box._code=code;
       const cb=box.querySelector(".pmcode"), ta=cb.querySelector("textarea"); ta.value=code;
       if(ok){ cb.hidden=true; notify(`인쇄용 코드를 복사했어요 (${code.length>1048576?(code.length/1048576).toFixed(1)+" MB":Math.max(1,Math.round(code.length/1024))+" KB"}) — 기출풀이 PDF 만들기 (공용)에 붙여넣으세요`); } else { cb.hidden=false; ta.focus(); ta.select(); }
       return; }
+    if(b.dataset.alt==="selall"){ const ta=box.querySelector(".pmcode textarea"); ta.focus(); ta.select(); try{ ta.setSelectionRange(0,ta.value.length); }catch(err){} let c=false; try{ c=document.execCommand("copy"); }catch(err){} if(c) notify("코드 전체를 복사했어요"); return; }
+    if(b.dataset.alt==="codefile"){ const c=box._code||""; if(!c) return; const fn=(document.title||"기출풀이").replace(/[\\/:*?"<>|]/g,"")+"_인쇄용코드.txt", f=new File([c],fn,{type:"text/plain"});
+      try{ if(navigator.canShare&&navigator.canShare({files:[f]})){ await navigator.share({files:[f], title:fn}); return; } }catch(err){ if(err&&err.name==="AbortError") return; }
+      try{ const a=document.createElement("a"); a.href=URL.createObjectURL(f); a.download=fn; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },4000); }catch(err){ notify("파일 저장이 막혀 있어요 — 전체 선택 후 복사해 주세요"); } return; }
     if(b.dataset.alt==="share"){ try{ await navigator.share({files:[box._f], title:box._f.name}); }catch(err){ if(!(err&&err.name==="AbortError")) notify("공유도 막혀 있어요 — 그림으로 받기를 써 주세요"); } return; }
     if(!pg.length) return;
     const v=document.createElement("div"); v.className="overlay pmimgv"; document.body.appendChild(v);
@@ -5638,14 +5650,15 @@ if(PM_ONLY){ document.documentElement.classList.add("pm-only");
     <p class="st" id="pmoSt"></p>
     <ol><li>원래 앱 ⚙ › PDF 만들기 → <b>PDF 만들기</b> → 저장 버튼 줄 오른쪽 <b>인쇄용 코드</b> → <b>인쇄용 코드 복사</b> (저장이 막히면 바로 나와요)</li><li>아래 칸에 붙여넣고 <b>바로 PDF 저장</b> — 고른 설정 그대로 만들어져요</li></ol>
     <textarea id="pmoCode" placeholder="${PM_UNIV?"인쇄용 코드를 여기에 붙여넣기":"인쇄용 코드(또는 진도 코드)를 여기에 붙여넣기"}" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
-    <div class="row"><button type="button" class="btn primary" id="pmoGo">바로 PDF 저장</button><button type="button" class="btn ghost" id="pmoMake">직접 골라 만들기</button><span class="msg" id="pmoMsg"></span></div>
+    <div class="row"><button type="button" class="btn primary" id="pmoGo">바로 PDF 저장</button><button type="button" class="btn ghost" id="pmoMake">직접 골라 만들기</button><label class="btn ghost" style="cursor:pointer">파일에서 불러오기<input type="file" id="pmoFile" accept=".txt,text/plain" hidden></label><span class="msg" id="pmoMsg"></span></div>
     <p class="st" style="margin-top:14px">문제 풀이는 원래 앱에서 해 주세요. 이 파일의 기록은 이 브라우저에만 저장돼요.</p></div>`;
   document.body.appendChild(box);
   const st=()=>{ box.querySelector("#pmoSt").textContent="지금 기록 · "+syncSummary(); }; st();
   const msg=t=>box.querySelector("#pmoMsg").textContent=t;
+  box.querySelector("#pmoFile").addEventListener("change",async e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; try{ box.querySelector("#pmoCode").value=await f.text(); msg("파일을 불러왔어요 — 바로 PDF 저장을 눌러 주세요"); }catch(err){ msg("파일을 읽을 수 없어요"); } e.target.value=""; });
   box.querySelector("#pmoGo").addEventListener("click",async()=>{ const txt=box.querySelector("#pmoCode").value; if(!txt.trim()){ msg("코드를 먼저 붙여넣어 주세요"); return; }
     let pc=null; try{ pc=await pmPrintRead(txt); }catch(e){ msg("코드를 읽을 수 없어요 — 전체를 붙여넣었는지 확인해 주세요"); return; }
-    if(!pc){ if(PM_UNIV){ msg("인쇄용 코드를 붙여넣어 주세요 (앱의 PDF 저장 → 인쇄용 코드 복사)"); return; } const r=await applyImport(txt); msg(r.ok?"진도를 불러왔어요 — 직접 골라 만들기를 눌러 주세요":r.msg); st(); return; }   // 진도 코드만 붙여넣은 경우
+    if(!pc){ if(PM_UNIV){ const t=txt.replace(/\s+/g,""); msg(t.length>200&&/^[A-Za-z0-9+/=]+$/.test(t)?"코드 앞부분(KCMPRINT2:)이 빠졌어요 — 앱에서 인쇄용 코드를 처음부터 끝까지 다시 복사해 주세요":"인쇄용 코드를 붙여넣어 주세요 (앱의 PDF 저장 → 인쇄용 코드 복사)"); return; } const r=await applyImport(txt); msg(r.ok?"진도를 불러왔어요 — 직접 골라 만들기를 눌러 주세요":r.msg); st(); return; }   // 진도 코드만 붙여넣은 경우
     pc=pmClean(pc);   // 남이 준 코드라도 스크립트가 실행되지 않게
     if(Array.isArray(pc.exams)&&pc.exams.length){   // 문제 데이터가 담긴 코드 — 받은 문항으로 바꿈
       EXAMS.length=0; pc.exams.forEach(e=>EXAMS.push(e));
